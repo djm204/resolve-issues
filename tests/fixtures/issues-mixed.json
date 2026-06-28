@@ -1,0 +1,8 @@
+[
+  { "number": 12, "title": "minor typo in readme",        "labels": [{ "name": "priority: low" }],      "updatedAt": "2026-06-20T00:00:00Z", "url": "u/12", "state": "open" },
+  { "number": 30, "title": "app crashes on launch",        "labels": [{ "name": "P0" }],                  "updatedAt": "2026-06-25T00:00:00Z", "url": "u/30", "state": "open" },
+  { "number": 31, "title": "slow query on dashboard",      "labels": [{ "name": "priority: medium" }],   "updatedAt": "2026-06-26T00:00:00Z", "url": "u/31", "state": "open" },
+  { "number": 18, "title": "unlabeled feature request",    "labels": [],                                  "updatedAt": "2026-06-24T00:00:00Z", "url": "u/18", "state": "open" },
+  { "number": 29, "title": "data loss on logout",          "labels": [{ "name": "critical" }],           "updatedAt": "2026-06-22T00:00:00Z", "url": "u/29", "state": "open" },
+  { "number": 27, "title": "auth token not refreshed",     "labels": [{ "name": "high" }],               "updatedAt": "2026-06-23T00:00:00Z", "url": "u/27", "state": "open" }
+]
