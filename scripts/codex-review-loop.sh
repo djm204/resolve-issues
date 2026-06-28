@@ -9,8 +9,21 @@
 #
 # Actions:
 #   detect   --repo OWNER/NAME
-#       Exit 0 and print {"available":true} if the Codex connector has reviewed in this
-#       repo before (best-effort). Exit 0 and print {"available":false} otherwise.
+#       Print {"available": true|false|"unknown", "via": "<source>"} for the Codex
+#       connector. Resolution order:
+#         1. installed GitHub Apps for the repo (authoritative) — only works when the gh
+#            token is App-authorized; a plain user token cannot list installations.
+#         2. prior connector activity in the repo (positive-only signal) => true.
+#         3. otherwise "unknown" — availability can't be proven without app-list access,
+#            so the caller should trigger a review and decide empirically (no response
+#            within the poll window => treat as unavailable). A fresh repo lands here.
+#       Never returns a false negative on a fresh repo: absence of past comments is
+#       "unknown", not false.
+#
+#   detect-classify --input FILE   (or stdin)   [pure, no network]
+#       Classify a repo's installed-apps JSON (array of {app_slug}|{slug}). Reads
+#       {"installations":[...], "botSlug":"chatgpt-codex-connector"} and prints
+#       {"available": true|false, "via": "app-list"}.
 #
 #   trigger  --repo OWNER/NAME --pr N
 #       Post an "@codex review" comment on PR N. Prints the trigger time (ISO8601 UTC).
@@ -81,8 +94,19 @@ classify_json() {
   '
 }
 
+# ---- pure app-list classifier (shared by `detect` and `detect-classify`) ----
+# Reads {installations:[{app_slug|slug}], botSlug} on stdin -> {available, via}.
+detect_classify_json() {
+  jq --arg defbot "$DEFAULT_BOT" '
+    (.botSlug // $defbot) as $slug
+    | ([ .installations[]? | (.app_slug // .slug // "") ]) as $slugs
+    | { available: ($slugs | any(. == $slug)), via: "app-list" }
+  '
+}
+
 # ---- arg parsing ------------------------------------------------------------
-[ $# -ge 1 ] || die "no action; expected detect|trigger|poll|classify"
+[ $# -ge 1 ] || die "no action; expected detect|detect-classify|trigger|poll|classify"
+case "$1" in -h|--help) sed -n '3,52p' "$0"; exit 0 ;; esac
 ACTION="$1"; shift
 
 REPO=""; PR=""; SINCE=""; INPUT=""
@@ -92,7 +116,7 @@ while [ $# -gt 0 ]; do
     --pr)    PR="${2:?--pr needs a value}";       shift 2 ;;
     --since) SINCE="${2:?--since needs a value}"; shift 2 ;;
     --input) INPUT="${2:?--input needs a value}"; shift 2 ;;
-    -h|--help) sed -n '3,55p' "$0"; exit 0 ;;
+    -h|--help) sed -n '3,52p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
@@ -104,18 +128,37 @@ case "$ACTION" in
     if [ -n "$INPUT" ]; then cat "$INPUT"; else cat; fi | classify_json
     ;;
 
+  detect-classify)
+    if [ -n "$INPUT" ]; then cat "$INPUT"; else cat; fi | detect_classify_json
+    ;;
+
   detect)
     need gh
     [ -n "$REPO" ] || die "detect needs --repo"
-    # Best-effort: has the connector ever commented in this repo?
+    owner="${REPO%%/*}"
+
+    # 1) authoritative: installed GitHub Apps (needs an App-authorized token).
+    #    Try the repo, user, and org installation endpoints; any that succeeds wins.
+    for ep in "repos/$REPO/installations" "user/installations" "orgs/$owner/installations"; do
+      apps="$(gh api "$ep" --jq '.installations // .' 2>/dev/null)" || continue
+      [ -n "$apps" ] || continue
+      verdict="$(printf '%s' "$apps" | jq -c --arg bot "$DEFAULT_BOT" \
+        '{installations: (if type=="array" then . else [] end), botSlug:$bot}' \
+        | detect_classify_json 2>/dev/null)" || continue
+      [ -n "$verdict" ] && { echo "$verdict"; exit 0; }
+    done
+
+    # 2) positive-only signal: has the connector ever commented in this repo?
     comments="$(gh api "repos/$REPO/issues/comments?per_page=100" 2>/dev/null || echo '[]')"
     hits="$(printf '%s' "$comments" | jq --arg bot "$DEFAULT_BOT" \
               '[ .[]? | select((.user.login // "" | sub("\\[bot\\]$"; "")) == $bot) ] | length' \
               2>/dev/null || echo 0)"
     if [ "${hits:-0}" -gt 0 ] 2>/dev/null; then
-      echo '{"available":true}'
+      echo '{"available":true,"via":"prior-activity"}'
     else
-      echo '{"available":false}'
+      # 3) can't prove it either way (e.g. fresh repo + user token) -> let the caller
+      #    trigger and decide empirically. NOT a false negative.
+      echo '{"available":"unknown","via":"undetermined"}'
     fi
     ;;
 
@@ -140,5 +183,5 @@ case "$ACTION" in
       | classify_json
     ;;
 
-  *) die "unknown action: $ACTION (expected detect|trigger|poll|classify)" ;;
+  *) die "unknown action: $ACTION (expected detect|detect-classify|trigger|poll|classify)" ;;
 esac

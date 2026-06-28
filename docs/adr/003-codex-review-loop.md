@@ -14,10 +14,17 @@ review comments will hang on clean passes and miss the "done" signal.
 ## Decision
 Introduce `scripts/codex-review-loop.sh` and wire it into fix mode only.
 
-- **Detection:** the loop is "available" if the Codex connector can review the repo.
-  Detect by checking for prior `chatgpt-codex-connector` activity / app installation;
-  if undetectable, treat as unavailable and **report the PR for manual review** rather
-  than blocking.
+- **Detection (tri-state, empirical fallback):** `detect` returns
+  `available: true | false | "unknown"`, resolved in order:
+  1. installed GitHub Apps for the repo (authoritative) — but listing installations
+     requires an App-authorized token; a plain user/OAuth token gets 401/403, so this is
+     only available in some environments.
+  2. prior `chatgpt-codex-connector` activity in the repo → `true` (positive-only).
+  3. otherwise `"unknown"` — **not** `false`. A fresh repo with a user token lands here.
+  The caller treats `"unknown"` empirically: trigger a review and conclude unavailable
+  only if no Codex response arrives within the first poll window. This avoids the original
+  false-negative where a fresh repo (no past comments) was wrongly reported unavailable
+  even though the connector was installed.
 - **Trigger:** post an `@codex review` issue comment on the PR; record the trigger
   timestamp.
 - **Poll all three channels** for bot activity newer than the trigger:

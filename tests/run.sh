@@ -51,6 +51,16 @@ assert_eq "clean signal wins over stale inline" "clean"  "$cw"
 stdin_clean="$(bash "$CODEX" classify < "$FIX/codex-clean.json" | jq -r .status)"
 assert_eq "classify reads stdin"     "clean"             "$stdin_clean"
 
+echo "codex-review-loop.sh detect-classify (app list)"
+has="$(bash "$CODEX" detect-classify --input "$FIX/apps-with-codex.json"    | jq -r .available)"
+assert_eq "codex app installed => available"     "true"  "$has"
+
+hasnt="$(bash "$CODEX" detect-classify --input "$FIX/apps-without-codex.json" | jq -r .available)"
+assert_eq "codex app absent => not available"    "false" "$hasnt"
+
+via="$(bash "$CODEX" detect-classify --input "$FIX/apps-with-codex.json" | jq -r .via)"
+assert_eq "detect-classify reports source"       "app-list" "$via"
+
 echo
 printf 'Total: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -31,5 +31,9 @@ bash tests/run.sh
 - Codex bot login is `chatgpt-codex-connector` (`[bot]` suffix tolerated). A clean pass is
   a **top-level issue comment** ("Didn't find any major issues"), not silence and not only
   inline comments — poll all three channels.
+- `detect` is **tri-state** (`true`/`false`/`"unknown"`). Listing installed GitHub Apps
+  needs an App-authorized token; a user token can't, so a fresh repo returns `"unknown"`,
+  and the loop decides availability empirically by triggering and watching the first poll
+  window. Never treat `"unknown"` as `false`.
 - `select-issues.sh` priority labels are case-insensitive: critical/p0, high/p1,
   medium/p2, low/p3; unlabeled sorts last (rank 99). Ties break by newest issue number.
