@@ -64,6 +64,15 @@ assert_eq "selected + this repo included => available"  "true"  "$sel_in"
 sel_out="$(bash "$CODEX" detect-classify --input "$FIX/apps-codex-selected-excluded.json" | jq -r .available)"
 assert_eq "selected + this repo excluded => not available" "false" "$sel_out"
 
+all_right="$(bash "$CODEX" detect-classify --input "$FIX/apps-codex-all-right-account.json" | jq -r .available)"
+assert_eq "all-repo install on owner's account => available"   "true"  "$all_right"
+
+all_wrong="$(bash "$CODEX" detect-classify --input "$FIX/apps-codex-all-wrong-account.json" | jq -r .available)"
+assert_eq "all-repo install on another account => not available" "false" "$all_wrong"
+
+susp="$(bash "$CODEX" detect-classify --input "$FIX/apps-codex-suspended.json" | jq -r .available)"
+assert_eq "suspended codex install => not available"           "false" "$susp"
+
 via="$(bash "$CODEX" detect-classify --input "$FIX/apps-with-codex.json" | jq -r .via)"
 assert_eq "detect-classify reports source"              "app-list" "$via"
 

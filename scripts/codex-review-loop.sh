@@ -24,10 +24,11 @@
 #
 #   detect-classify --input FILE   (or stdin)   [pure, no network]
 #       Classify installed-apps JSON. Reads
-#       {"installations":[{app_slug|slug, repository_selection?, repoIncluded?}],
-#        "botSlug":"chatgpt-codex-connector"} and prints {"available":bool, "via":"app-list"}.
-#       An installation counts only if its slug is the bot AND it covers this repo:
-#       repository_selection=="all", or =="selected" with repoIncluded==true.
+#       {"installations":[{app_slug|slug, account:{login}?, repository_selection?,
+#         repoIncluded?, suspended_at?}], "botSlug":"...", "owner":"OWNER"?}
+#       and prints {"available":bool, "via":"app-list"}. An installation counts only if its
+#       slug is the bot, it is not suspended, AND it covers this repo: "all" with
+#       account.login == owner (when owner given), or "selected" with repoIncluded==true.
 #
 #   trigger  --repo OWNER/NAME --pr N
 #       Post an "@codex review" comment on PR N. Prints the trigger time (ISO8601 UTC).
@@ -99,17 +100,25 @@ classify_json() {
 }
 
 # ---- pure app-list classifier (shared by `detect` and `detect-classify`) ----
-# Reads {installations:[...], botSlug} on stdin -> {available, via}.
-# An installation matches only when its slug is the bot AND it actually covers THIS repo:
-# repository_selection == "all", or "selected" with repoIncluded == true. Installations
-# scoped to other repos (selected + repoIncluded false) do NOT count. The network layer
-# computes repoIncluded; for "all" it is irrelevant.
+# Reads {installations:[...], botSlug, owner?} on stdin -> {available, via}.
+# An installation counts only when ALL hold:
+#   - slug == bot
+#   - it is active (suspended_at is null/absent)
+#   - it actually covers THIS repo:
+#       repository_selection == "all"  AND  (no owner given OR account.login == owner), or
+#       repository_selection == "selected" with repoIncluded == true (repo-scoped already).
+# The account check stops an "all" install on a *different* account the caller can see from
+# masquerading as coverage of this repo. The network layer computes repoIncluded.
 detect_classify_json() {
   jq --arg defbot "$DEFAULT_BOT" '
-    (.botSlug // $defbot) as $slug
+    (.botSlug // $defbot)              as $slug
+    | (.owner // "" | ascii_downcase)  as $owner
     | ([ .installations[]?
          | select((.app_slug // .slug // "") == $slug)
-         | ((.repository_selection // "all") == "all") or (.repoIncluded == true) ]) as $covers
+         | select((.suspended_at // null) == null)
+         | (.repository_selection // "all") as $sel
+         | (($sel == "all") and ($owner == "" or ((.account.login // "" | ascii_downcase) == $owner)))
+           or (.repoIncluded == true) ]) as $covers
     | { available: ($covers | any), via: "app-list" }
   '
 }
@@ -168,13 +177,12 @@ case "$ACTION" in
         [ -n "$inst" ] || continue
         sel="$(printf '%s' "$inst" | jq -r '.repository_selection // "all"')"
         included=false
-        if [ "$sel" = "all" ]; then
-          included=true
-        else
+        if [ "$sel" != "all" ]; then
           id="$(printf '%s' "$inst" | jq -r '.id')"
+          # -F: match the owner/name literally (repo names can contain regex metachars).
           if gh api --paginate "user/installations/$id/repositories" \
                --jq '.repositories[]?.full_name' 2>/dev/null \
-               | grep -qix "$REPO"; then
+               | grep -Fqix "$REPO"; then
             included=true
           fi
         fi
@@ -182,8 +190,10 @@ case "$ACTION" in
           '. + [$inst + {repoIncluded:$inc}]')"
       done < <(printf '%s' "$enriched" | jq -c '.[]')
 
-      verdict="$(printf '%s' "$resolved" | jq -c --arg bot "$DEFAULT_BOT" \
-        '{installations:., botSlug:$bot}' | detect_classify_json 2>/dev/null)" || continue
+      # owner gate: an "all" install only covers this repo if its account is the repo owner;
+      # suspended installs are dropped inside detect_classify_json.
+      verdict="$(printf '%s' "$resolved" | jq -c --arg bot "$DEFAULT_BOT" --arg owner "$owner" \
+        '{installations:., botSlug:$bot, owner:$owner}' | detect_classify_json 2>/dev/null)" || continue
       # Only trust an affirmative app-list verdict; a negative page might be incomplete
       # for a different account scope, so fall through rather than declaring false here.
       if [ "$(printf '%s' "$verdict" | jq -r '.available')" = "true" ]; then
