@@ -11,19 +11,23 @@
 #   detect   --repo OWNER/NAME
 #       Print {"available": true|false|"unknown", "via": "<source>"} for the Codex
 #       connector. Resolution order:
-#         1. installed GitHub Apps for the repo (authoritative) — only works when the gh
-#            token is App-authorized; a plain user token cannot list installations.
+#         1. installed GitHub Apps that actually cover THIS repo (authoritative-positive).
+#            Account-wide install lists are paginated (--paginate) and may include apps
+#            scoped to *other* repos; a "selected" installation only counts after its
+#            repository list confirms OWNER/NAME. Only an affirmative verdict is trusted
+#            here — a non-match falls through (the visible page/scope may be incomplete).
 #         2. prior connector activity in the repo (positive-only signal) => true.
-#         3. otherwise "unknown" — availability can't be proven without app-list access,
-#            so the caller should trigger a review and decide empirically (no response
-#            within the poll window => treat as unavailable). A fresh repo lands here.
-#       Never returns a false negative on a fresh repo: absence of past comments is
-#       "unknown", not false.
+#         3. otherwise "unknown" — availability can't be proven (e.g. fresh repo with a
+#            non-App token), so the caller should trigger a review and decide empirically
+#            (no response within the *normal* review window => treat as unavailable).
+#       Never returns a false negative on a fresh repo: absence of evidence is "unknown".
 #
 #   detect-classify --input FILE   (or stdin)   [pure, no network]
-#       Classify a repo's installed-apps JSON (array of {app_slug}|{slug}). Reads
-#       {"installations":[...], "botSlug":"chatgpt-codex-connector"} and prints
-#       {"available": true|false, "via": "app-list"}.
+#       Classify installed-apps JSON. Reads
+#       {"installations":[{app_slug|slug, repository_selection?, repoIncluded?}],
+#        "botSlug":"chatgpt-codex-connector"} and prints {"available":bool, "via":"app-list"}.
+#       An installation counts only if its slug is the bot AND it covers this repo:
+#       repository_selection=="all", or =="selected" with repoIncluded==true.
 #
 #   trigger  --repo OWNER/NAME --pr N
 #       Post an "@codex review" comment on PR N. Prints the trigger time (ISO8601 UTC).
@@ -95,18 +99,24 @@ classify_json() {
 }
 
 # ---- pure app-list classifier (shared by `detect` and `detect-classify`) ----
-# Reads {installations:[{app_slug|slug}], botSlug} on stdin -> {available, via}.
+# Reads {installations:[...], botSlug} on stdin -> {available, via}.
+# An installation matches only when its slug is the bot AND it actually covers THIS repo:
+# repository_selection == "all", or "selected" with repoIncluded == true. Installations
+# scoped to other repos (selected + repoIncluded false) do NOT count. The network layer
+# computes repoIncluded; for "all" it is irrelevant.
 detect_classify_json() {
   jq --arg defbot "$DEFAULT_BOT" '
     (.botSlug // $defbot) as $slug
-    | ([ .installations[]? | (.app_slug // .slug // "") ]) as $slugs
-    | { available: ($slugs | any(. == $slug)), via: "app-list" }
+    | ([ .installations[]?
+         | select((.app_slug // .slug // "") == $slug)
+         | ((.repository_selection // "all") == "all") or (.repoIncluded == true) ]) as $covers
+    | { available: ($covers | any), via: "app-list" }
   '
 }
 
 # ---- arg parsing ------------------------------------------------------------
 [ $# -ge 1 ] || die "no action; expected detect|detect-classify|trigger|poll|classify"
-case "$1" in -h|--help) sed -n '3,52p' "$0"; exit 0 ;; esac
+case "$1" in -h|--help) sed -n '3,56p' "$0"; exit 0 ;; esac
 ACTION="$1"; shift
 
 REPO=""; PR=""; SINCE=""; INPUT=""
@@ -116,7 +126,7 @@ while [ $# -gt 0 ]; do
     --pr)    PR="${2:?--pr needs a value}";       shift 2 ;;
     --since) SINCE="${2:?--since needs a value}"; shift 2 ;;
     --input) INPUT="${2:?--input needs a value}"; shift 2 ;;
-    -h|--help) sed -n '3,52p' "$0"; exit 0 ;;
+    -h|--help) sed -n '3,56p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
@@ -137,15 +147,48 @@ case "$ACTION" in
     [ -n "$REPO" ] || die "detect needs --repo"
     owner="${REPO%%/*}"
 
-    # 1) authoritative: installed GitHub Apps (needs an App-authorized token).
-    #    Try the repo, user, and org installation endpoints; any that succeeds wins.
-    for ep in "repos/$REPO/installations" "user/installations" "orgs/$owner/installations"; do
-      apps="$(gh api "$ep" --jq '.installations // .' 2>/dev/null)" || continue
-      [ -n "$apps" ] || continue
-      verdict="$(printf '%s' "$apps" | jq -c --arg bot "$DEFAULT_BOT" \
-        '{installations: (if type=="array" then . else [] end), botSlug:$bot}' \
-        | detect_classify_json 2>/dev/null)" || continue
-      [ -n "$verdict" ] && { echo "$verdict"; exit 0; }
+    # 1) authoritative: is the bot's GitHub App installed AND covering THIS repo?
+    #    Account-wide lists (user/orgs) are paginated and may include installations
+    #    scoped to *other* repos, so for each matching codex installation we resolve
+    #    whether it actually covers $REPO before trusting an affirmative verdict.
+    #    (The repo-scoped singular endpoint needs App-auth and 401s on a user token.)
+    for ep in "user/installations" "orgs/$owner/installations"; do
+      # --paginate streams every page; --jq '.installations[]' yields one install per line.
+      insts="$(gh api --paginate "$ep" --jq '.installations[]?' 2>/dev/null | jq -s '.' 2>/dev/null)" || continue
+      [ -n "$insts" ] && [ "$insts" != "[]" ] || continue
+
+      # For each codex installation, mark repoIncluded: "all" => true; "selected" =>
+      # check that installation's repository list (paginated) for $REPO.
+      enriched="$(printf '%s' "$insts" | jq -c --arg bot "$DEFAULT_BOT" \
+        '[ .[] | select((.app_slug // .slug // "") == $bot) ]')"
+      [ "$enriched" = "[]" ] && continue
+
+      resolved='[]'
+      while IFS= read -r inst; do
+        [ -n "$inst" ] || continue
+        sel="$(printf '%s' "$inst" | jq -r '.repository_selection // "all"')"
+        included=false
+        if [ "$sel" = "all" ]; then
+          included=true
+        else
+          id="$(printf '%s' "$inst" | jq -r '.id')"
+          if gh api --paginate "user/installations/$id/repositories" \
+               --jq '.repositories[]?.full_name' 2>/dev/null \
+               | grep -qix "$REPO"; then
+            included=true
+          fi
+        fi
+        resolved="$(printf '%s' "$resolved" | jq -c --argjson inst "$inst" --argjson inc "$included" \
+          '. + [$inst + {repoIncluded:$inc}]')"
+      done < <(printf '%s' "$enriched" | jq -c '.[]')
+
+      verdict="$(printf '%s' "$resolved" | jq -c --arg bot "$DEFAULT_BOT" \
+        '{installations:., botSlug:$bot}' | detect_classify_json 2>/dev/null)" || continue
+      # Only trust an affirmative app-list verdict; a negative page might be incomplete
+      # for a different account scope, so fall through rather than declaring false here.
+      if [ "$(printf '%s' "$verdict" | jq -r '.available')" = "true" ]; then
+        echo "$verdict"; exit 0
+      fi
     done
 
     # 2) positive-only signal: has the connector ever commented in this repo?

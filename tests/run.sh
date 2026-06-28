@@ -53,13 +53,19 @@ assert_eq "classify reads stdin"     "clean"             "$stdin_clean"
 
 echo "codex-review-loop.sh detect-classify (app list)"
 has="$(bash "$CODEX" detect-classify --input "$FIX/apps-with-codex.json"    | jq -r .available)"
-assert_eq "codex app installed => available"     "true"  "$has"
+assert_eq "codex installed for all repos => available"  "true"  "$has"
 
 hasnt="$(bash "$CODEX" detect-classify --input "$FIX/apps-without-codex.json" | jq -r .available)"
-assert_eq "codex app absent => not available"    "false" "$hasnt"
+assert_eq "codex app absent => not available"           "false" "$hasnt"
+
+sel_in="$(bash "$CODEX" detect-classify --input "$FIX/apps-codex-selected-included.json" | jq -r .available)"
+assert_eq "selected + this repo included => available"  "true"  "$sel_in"
+
+sel_out="$(bash "$CODEX" detect-classify --input "$FIX/apps-codex-selected-excluded.json" | jq -r .available)"
+assert_eq "selected + this repo excluded => not available" "false" "$sel_out"
 
 via="$(bash "$CODEX" detect-classify --input "$FIX/apps-with-codex.json" | jq -r .via)"
-assert_eq "detect-classify reports source"       "app-list" "$via"
+assert_eq "detect-classify reports source"              "app-list" "$via"
 
 echo
 printf 'Total: %d passed, %d failed\n' "$pass" "$fail"

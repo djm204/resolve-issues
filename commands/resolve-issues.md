@@ -95,9 +95,11 @@ Use the helper for the mechanical steps; you supply the judgement.
    - `false` → connector confirmed **not** installed. Report "PR <url> created — codex
      review loop unavailable, ready for manual review" and finish this issue.
    - `"unknown"` → can't be proven (e.g. fresh repo with a non-App token). **Do not skip** —
-     proceed to trigger and decide empirically: if the first full poll window elapses with
-     `status` still `working` and `respondedAt == null`, treat as unavailable and report
-     the PR for manual review. (Never skip the loop just because detection was inconclusive.)
+     proceed to trigger and decide empirically. Codex normally replies in ~2–6 min, so poll
+     the **full normal review window** (all ~8 rounds of step 3) before concluding. Only if
+     that entire window elapses with `status` still `working` and `respondedAt == null`,
+     treat as unavailable and report the PR for manual review. (Never declare unavailable
+     after just the first poll, and never skip the loop on inconclusive detection.)
 
 2. **Trigger** and capture the trigger time:
    ```bash

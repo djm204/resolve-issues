@@ -16,9 +16,13 @@ Introduce `scripts/codex-review-loop.sh` and wire it into fix mode only.
 
 - **Detection (tri-state, empirical fallback):** `detect` returns
   `available: true | false | "unknown"`, resolved in order:
-  1. installed GitHub Apps for the repo (authoritative) — but listing installations
-     requires an App-authorized token; a plain user/OAuth token gets 401/403, so this is
-     only available in some environments.
+  1. installed GitHub Apps that **cover this repo** (authoritative-positive). Listing
+     installations requires an App-authorized token (a plain user/OAuth token gets
+     401/403, so this signal is environment-dependent). When the lists are available they
+     are **paginated** (read all pages) and **account-wide** — a `selected`-repository
+     installation only counts after its repository list confirms `OWNER/NAME`. Only an
+     affirmative verdict is trusted; a non-match falls through (the visible page/scope may
+     be incomplete) rather than declaring `false`.
   2. prior `chatgpt-codex-connector` activity in the repo → `true` (positive-only).
   3. otherwise `"unknown"` — **not** `false`. A fresh repo with a user token lands here.
   The caller treats `"unknown"` empirically: trigger a review and conclude unavailable
