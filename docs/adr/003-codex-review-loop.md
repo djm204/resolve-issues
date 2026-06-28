@@ -26,9 +26,10 @@ Introduce `scripts/codex-review-loop.sh` and wire it into fix mode only.
   2. prior `chatgpt-codex-connector` activity in the repo → `true` (positive-only).
   3. otherwise `"unknown"` — **not** `false`. A fresh repo with a user token lands here.
   The caller treats `"unknown"` empirically: trigger a review and conclude unavailable
-  only if no Codex response arrives within the first poll window. This avoids the original
-  false-negative where a fresh repo (no past comments) was wrongly reported unavailable
-  even though the connector was installed.
+  only if no Codex response arrives within the **full normal review window** (~2–6 min /
+  all poll rounds) — not after the first poll. This avoids the original false-negative
+  where a fresh repo (no past comments) was wrongly reported unavailable even though the
+  connector was installed.
 - **Trigger:** post an `@codex review` issue comment on the PR; record the trigger
   timestamp.
 - **Poll all three channels** for bot activity newer than the trigger:

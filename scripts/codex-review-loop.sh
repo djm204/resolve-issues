@@ -179,10 +179,13 @@ case "$ACTION" in
         included=false
         if [ "$sel" != "all" ]; then
           id="$(printf '%s' "$inst" | jq -r '.id')"
-          # -F: match the owner/name literally (repo names can contain regex metachars).
-          if gh api --paginate "user/installations/$id/repositories" \
-               --jq '.repositories[]?.full_name' 2>/dev/null \
-               | grep -Fqix "$REPO"; then
+          # Capture the full list first: piping gh straight into `grep -q` lets grep close
+          # the pipe on first match, which (under `set -o pipefail`) surfaces gh's SIGPIPE
+          # 141 as a pipeline failure and would drop a real match. -F/-x/-i: match the
+          # owner/name literally and case-insensitively (repo names can contain "." etc.).
+          repolist="$(gh api --paginate "user/installations/$id/repositories" \
+                        --jq '.repositories[]?.full_name' 2>/dev/null || true)"
+          if printf '%s\n' "$repolist" | grep -Fqix "$REPO"; then
             included=true
           fi
         fi
