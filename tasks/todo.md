@@ -44,7 +44,19 @@ issues priority-first and **triage**, **plan**, or **fix** them.
 
 ### Phase 5 — Verify + baseline commit
 - [x] tests 10/10, `bash -n` clean, all JSON valid
-- [ ] Initial git commit (branch first — on default branch)
+- [x] Initial commit on `feat/resolve-issues-command`, based on `main`.
 
 ## Review
-_(filled at task-end)_
+
+Shipped the full `/resolve-issues` command per the approved spec.
+
+- **Surface:** one command, mode arg (`triage` default | `plan` | `fix`), `--parallel [N]`.
+- **Fix mode:** one PR per issue; sequential default, parallel worktree subagents (N=10 default).
+- **Codex loop:** `scripts/codex-review-loop.sh` handles detect/trigger/poll/classify across
+  all three GitHub channels; terminal clean signal = "didn't find any major issues" issue
+  comment. Judgement (is-it-real / how-to-fix) stays in the command/agent.
+- **Tests:** `tests/run.sh` — 10/10 pass; `bash -n` clean; all JSON valid.
+- **Docs:** ADR-001/002/003, AGENT_RAMP_UP, README.
+
+Repo created at github.com/djm204/resolve-issues (public); PR opened against `main`;
+codex review loop run on the PR.
