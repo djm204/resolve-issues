@@ -8,6 +8,7 @@
     "description": "Marketplace for the resolve-issues plugin.",
     "version": "0.1.0"
   },
+  "allowCrossMarketplaceDependenciesOn": ["codex-review"],
   "plugins": [
     {
       "name": "resolve-issues",

@@ -1,7 +1,9 @@
 # ADR-003: Codex review loop integration
 
 ## Status
-Accepted
+Accepted — implementation extracted to the `codex-review` plugin; see ADR-004. This ADR
+remains the record of *why* the loop works the way it does (the mechanics now live in the
+`codex-review-loop` skill).
 
 ## Context
 After fix mode opens a PR, the work is not done until it has been reviewed. The user's

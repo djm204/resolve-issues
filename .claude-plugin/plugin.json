@@ -9,5 +9,8 @@
   "homepage": "https://github.com/djm204/resolve-issues",
   "repository": "https://github.com/djm204/resolve-issues",
   "license": "MIT",
-  "keywords": ["github", "issues", "triage", "automation", "workflow"]
+  "keywords": ["github", "issues", "triage", "automation", "workflow"],
+  "dependencies": [
+    { "name": "codex-review", "marketplace": "codex-review" }
+  ]
 }
