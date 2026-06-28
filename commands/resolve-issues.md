@@ -99,7 +99,10 @@ which case report the PR for manual review).
 If the `codex-review-loop` skill is somehow unavailable, fall back to commenting
 `@codex review` on the PR, watching all three GitHub channels for the
 `chatgpt-codex-connector` bot, addressing findings, and repeating until it reports no
-major issues.
+major issues. **Bound this fallback:** cap the wait at the normal review window (~8 polls /
+~6–8 min). If the connector never responds (no bot activity in that window) or is not
+installed, stop and report the PR as "created — codex review loop unavailable, ready for
+manual review" rather than leaving the issue/PR stuck indefinitely.
 
 ## 5. Report
 

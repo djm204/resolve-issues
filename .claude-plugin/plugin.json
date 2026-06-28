@@ -1,6 +1,6 @@
 {
   "name": "resolve-issues",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Iterate through GitHub issues and triage, plan, or fix them — priority-ordered, highest priority first.",
   "author": {
     "name": "David Mendez",
