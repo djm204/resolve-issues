@@ -67,6 +67,45 @@ To also remove the auto-installed `codex-review` dependency if nothing else need
 claude plugin uninstall resolve-issues --prune
 ```
 
+## Installing on other agents
+
+The instructions above are for Claude Code, but nothing here is Claude-specific at its core.
+The logic lives in **plain bash scripts** and **markdown procedures**, so any agent
+(Codex, Gemini CLI, Copilot CLI, Cursor, a custom harness, …) can adopt and adapt it.
+
+### Key files to point your agent at
+
+| File | What it is | How another agent uses it |
+|------|------------|---------------------------|
+| `commands/resolve-issues.md` | The command procedure, written as a prompt. The body (below the YAML frontmatter) is the step-by-step the agent follows. | Load it as your agent's equivalent of a command/skill, or paste the body as a task prompt. Ignore the Claude-specific frontmatter. |
+| `scripts/select-issues.sh` | Pure logic: fetch + priority-order open issues as JSON. Bash + `jq` + `gh`. | Call it directly. `--input FILE` runs the ranking on canned JSON with no network — use it in tests. |
+| `.claude-plugin/plugin.json` | Manifest: name, version, and the `codex-review` dependency. | Read for metadata and to know it needs the codex-review loop. |
+| `AGENTS.md` | This repo's agent-agnostic guide (layout, conventions, working agreement). | Start here for orientation. |
+| `docs/adr/` | Why the design is the way it is. | Read before changing behavior. |
+| Codex loop: the `codex-review` plugin's `skills/codex-review-loop/SKILL.md` + `codex-review-loop.sh` | The reusable review-loop procedure + script. | Vendor or reference it the same way — the script is standalone bash; the SKILL.md is the procedure. |
+
+### Generic adaptation steps
+
+1. **Ensure the runtime deps exist:** authenticated `gh` and `jq` on `PATH`.
+2. **Expose the procedure.** Read `commands/resolve-issues.md` (skip the frontmatter) and
+   register its body as a command/skill/prompt in your agent's own mechanism:
+   - Claude Code: `commands/*.md` and `skills/*/SKILL.md` are auto-discovered.
+   - Codex: surface it via `AGENTS.md` / a `.codex` prompt.
+   - Gemini CLI: expose as a skill activated by `activate_skill`.
+   - Copilot CLI: register as a `skill`.
+   - Custom harness: feed the markdown body as the system/task prompt.
+3. **Wire the scripts.** Wherever the procedure references
+   `${CLAUDE_PLUGIN_ROOT}/scripts/...`, substitute the absolute path where you placed the
+   scripts.
+4. **Provide the Codex loop.** Either vendor `codex-review-loop.sh` + its SKILL.md alongside,
+   or have your procedure call the script directly. It is plain bash and agent-independent.
+5. **Keep the pure cores testable.** Both scripts expose `--input` for network-free runs;
+   reuse `tests/run.sh` (and the codex-review plugin's tests) as your regression suite.
+
+The intent is portability: the command markdown is the spec, the bash scripts are the
+engine, and the manifests are just packaging. Swap the packaging for your agent's and the
+behavior carries over unchanged.
+
 ## Troubleshooting
 
 | Symptom | Fix |

@@ -12,6 +12,9 @@ imports this file.)
 This repo is a plugin definition (manifests + a command + a script), **not** an application.
 There is no build step and no runtime server.
 
+Packaged for Claude Code, but portable: the logic is plain bash + markdown procedures. To
+run it under a different agent, see **"Installing on other agents"** in `INSTALL.md`.
+
 ## Layout
 
 | Path | Purpose |
