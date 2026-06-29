@@ -8,9 +8,14 @@ A [Claude Code](https://claude.com/claude-code) plugin that iterates open GitHub
 Add the marketplace, then install the plugin:
 
 ```
+/plugin marketplace add djm204/codex-review
 /plugin marketplace add djm204/resolve-issues
 /plugin install resolve-issues
 ```
+
+`resolve-issues` **depends on the [`codex-review`](https://github.com/djm204/codex-review)
+plugin** (it provides the review-loop skill) and Claude Code auto-installs it — add its
+marketplace first so the dependency resolves.
 
 Requires [`gh`](https://cli.github.com/) (authenticated) and `jq`. The codex review loop
 additionally requires the GitHub Codex connector (`@codex`) installed on the repo.

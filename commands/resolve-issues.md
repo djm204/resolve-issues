@@ -84,49 +84,27 @@ Finally, print a table: issue, branch, PR URL, codex status, notes.
 
 ## 4. Codex review loop (fix mode, per PR)
 
-Use the helper for the mechanical steps; you supply the judgement.
+**Delegate to the `codex-review:codex-review-loop` skill.** This plugin depends on the
+`codex-review` plugin (auto-installed), which provides the loop's mechanics and gotchas —
+detection, three-channel polling, the terminal "no major issues" signal, finding
+classification, and thread resolution. Invoke it via the Skill tool by its namespaced name
+**`codex-review:codex-review-loop`** (plugin skills are exposed under their plugin
+namespace, not as a bare local skill) to drive the review on each PR; do not re-implement
+the mechanics here.
 
-1. **Detect** availability:
-   ```bash
-   "${CLAUDE_PLUGIN_ROOT}/scripts/codex-review-loop.sh" detect --repo <OWNER/NAME>
-   ```
-   `available` is tri-state:
-   - `true` → connector is present (via installed-app list or prior activity). Proceed.
-   - `false` → connector confirmed **not** installed. Report "PR <url> created — codex
-     review loop unavailable, ready for manual review" and finish this issue.
-   - `"unknown"` → can't be proven (e.g. fresh repo with a non-App token). **Do not skip** —
-     proceed to trigger and decide empirically. Codex normally replies in ~2–6 min, so poll
-     the **full normal review window** (all ~8 rounds of step 3) before concluding. Only if
-     that entire window elapses with `status` still `working` and `respondedAt == null`,
-     treat as unavailable and report the PR for manual review. (Never declare unavailable
-     after just the first poll, and never skip the loop on inconclusive detection.)
+What you own (judgement, per the skill's "Addressing findings" section): for each finding,
+first decide whether it is a real issue. If not, reply explaining why and resolve the
+thread. If real, fix it, push, reply with a detailed explanation, and resolve the thread.
+Repeat rounds until the skill reports the PR clean (or the connector is unavailable, in
+which case report the PR for manual review).
 
-2. **Trigger** and capture the trigger time:
-   ```bash
-   TS="$("${CLAUDE_PLUGIN_ROOT}/scripts/codex-review-loop.sh" trigger --repo <R> --pr <N>)"
-   ```
-
-3. **Poll** until a terminal state (re-run every ~60–90s; cap at ~8 rounds total):
-   ```bash
-   "${CLAUDE_PLUGIN_ROOT}/scripts/codex-review-loop.sh" poll --repo <R> --pr <N> --since "$TS"
-   ```
-   - `status == "working"` → wait and poll again.
-   - `status == "clean"` → **done**. Codex found no major issues. Stop the loop.
-   - `status == "findings"` → address them (step 4), then re-trigger (step 2) with a fresh
-     timestamp and keep polling.
-
-4. **Address each finding** — judgement is yours:
-   - **First decide if it is a real issue.** If it is *not*, reply to the thread
-     explaining why it is a non-issue, then resolve the thread. Do not change code.
-   - If it *is* real: implement the fix, push to the PR branch, reply on the thread with a
-     **detailed explanation of how you fixed it**, and mark the thread **resolved**.
-   - Resolve inline threads via the GraphQL `resolveReviewThread` mutation
-     (`gh api graphql`), matching the thread by `path`/`line`/comment `id` from the poll
-     output. Reply with `gh api repos/<R>/pulls/<N>/comments/<id>/replies` (inline) or
-     `gh pr comment` (top-level).
-
-5. Stop when `poll` reports `clean`, or when the round cap is hit (then report the PR as
-   "codex loop incomplete — unresolved findings remain" rather than claiming success).
+If the `codex-review:codex-review-loop` skill is somehow unavailable, fall back to commenting
+`@codex review` on the PR, watching all three GitHub channels for the
+`chatgpt-codex-connector` bot, addressing findings, and repeating until it reports no
+major issues. **Bound this fallback:** cap the wait at the normal review window (~8 polls /
+~6–8 min). If the connector never responds (no bot activity in that window) or is not
+installed, stop and report the PR as "created — codex review loop unavailable, ready for
+manual review" rather than leaving the issue/PR stuck indefinitely.
 
 ## 5. Report
 

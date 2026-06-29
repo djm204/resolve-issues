@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Marketplace for the resolve-issues plugin.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
+  "allowCrossMarketplaceDependenciesOn": ["codex-review"],
   "plugins": [
     {
       "name": "resolve-issues",
       "source": "./",
       "description": "Iterate through GitHub issues and triage, plan, or fix them — priority-ordered, highest priority first.",
-      "version": "0.1.0",
       "category": "workflow",
       "keywords": ["github", "issues", "triage", "automation"]
     }

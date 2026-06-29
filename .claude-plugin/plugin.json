@@ -1,6 +1,6 @@
 {
   "name": "resolve-issues",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Iterate through GitHub issues and triage, plan, or fix them — priority-ordered, highest priority first.",
   "author": {
     "name": "David Mendez",
@@ -9,5 +9,8 @@
   "homepage": "https://github.com/djm204/resolve-issues",
   "repository": "https://github.com/djm204/resolve-issues",
   "license": "MIT",
-  "keywords": ["github", "issues", "triage", "automation", "workflow"]
+  "keywords": ["github", "issues", "triage", "automation", "workflow"],
+  "dependencies": [
+    { "name": "codex-review", "marketplace": "codex-review" }
+  ]
 }
