@@ -84,10 +84,12 @@ Finally, print a table: issue, branch, PR URL, codex status, notes.
 
 ## 4. Codex review loop (fix mode, per PR)
 
-**Delegate to the `codex-review-loop` skill.** This plugin depends on the `codex-review`
-plugin (auto-installed), which provides the loop's mechanics and gotchas — detection,
-three-channel polling, the terminal "no major issues" signal, finding classification, and
-thread resolution. Invoke that skill to drive the review on each PR; do not re-implement
+**Delegate to the `codex-review:codex-review-loop` skill.** This plugin depends on the
+`codex-review` plugin (auto-installed), which provides the loop's mechanics and gotchas —
+detection, three-channel polling, the terminal "no major issues" signal, finding
+classification, and thread resolution. Invoke it via the Skill tool by its namespaced name
+**`codex-review:codex-review-loop`** (plugin skills are exposed under their plugin
+namespace, not as a bare local skill) to drive the review on each PR; do not re-implement
 the mechanics here.
 
 What you own (judgement, per the skill's "Addressing findings" section): for each finding,
@@ -96,7 +98,7 @@ thread. If real, fix it, push, reply with a detailed explanation, and resolve th
 Repeat rounds until the skill reports the PR clean (or the connector is unavailable, in
 which case report the PR for manual review).
 
-If the `codex-review-loop` skill is somehow unavailable, fall back to commenting
+If the `codex-review:codex-review-loop` skill is somehow unavailable, fall back to commenting
 `@codex review` on the PR, watching all three GitHub channels for the
 `chatgpt-codex-connector` bot, addressing findings, and repeating until it reports no
 major issues. **Bound this fallback:** cap the wait at the normal review window (~8 polls /
